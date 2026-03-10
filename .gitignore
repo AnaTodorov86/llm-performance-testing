@@ -3,7 +3,8 @@
 
 .idea/
 
-*.json
 *.csv
 
 .DS_Store
+
+!reports/.gitkeep
