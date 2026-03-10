@@ -1,3 +1,8 @@
+![CI/CD](https://github.com/AnaTodorov86/llm-performance-testing/actions/workflows/llm-tests.yml/badge.svg)
+![k6](https://img.shields.io/badge/tested%20with-k6-7D64FF)
+![Groq](https://img.shields.io/badge/LLM-Groq-orange)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 # LLM Performance & Quality Testing Framework
 
 A comprehensive testing framework for evaluating LLM API performance, 
