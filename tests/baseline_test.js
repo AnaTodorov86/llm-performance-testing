@@ -9,10 +9,10 @@ const successRate = new Rate('llm_success');
 
 export const options = {
     stages: [
-        { duration: '30s', target: 1 },  // start lagano
-        { duration: '30s', target: 3 },  // optimalna zona
-        { duration: '30s', target: 5 },  // maksimum pre rate limita
-        { duration: '30s', target: 0 },  // ramp down
+        { duration: '30s', target: 1 },
+        { duration: '30s', target: 3 },
+        { duration: '30s', target: 5 },
+        { duration: '30s', target: 0 },
     ],
     thresholds: {
         'llm_errors': ['rate<0.1'],
@@ -32,7 +32,6 @@ const PROMPTS = [
 ];
 
 export default function () {
-    // svaki korisnik dobija random prompt — realističniji scenario
     const prompt = PROMPTS[Math.floor(Math.random() * PROMPTS.length)];
 
     const payload = JSON.stringify({

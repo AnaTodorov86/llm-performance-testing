@@ -10,15 +10,14 @@ export const options = {
     vus: 3,
     iterations: 30,
     thresholds: {
-        'quality_failures': ['rate<0.1'],   // max 10% quality failures
-        'hallucinations': ['count<5'],       // max 5 halucinacija
-        'inconsistencies': ['count<5'],      // max 5 nekonzistentnosti
+        'quality_failures': ['rate<0.1'],
+        'hallucinations': ['count<5'],
+        'inconsistencies': ['count<5'],
     },
 };
 
 const API_KEY = __ENV.GROQ_API_KEY || '';
 
-// pitanja sa TAČNIM očekivanim odgovorima
 const QUALITY_CHECKS = [
     {
         prompt: 'What is the capital of France? Answer in one word only.',
@@ -57,7 +56,7 @@ function askLLM(prompt) {
         model: 'llama-3.1-8b-instant',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 20,
-        temperature: 0, // temperatura 0 = konzistentni odgovori
+        temperature: 0,
     });
 
     const params = {
@@ -90,12 +89,10 @@ export default function () {
         return;
     }
 
-    // da li odgovor sadrzi ocekivani odgovor?
     const isCorrect = Array.isArray(testCase.expected)
         ? testCase.expected.some(e => answer.includes(e))
         : answer.includes(testCase.expected);
 
-    // da li je odgovor predugi? (model ignorise instrukciju)
     const isTooLong = answer.split(' ').length > 5;
 
     if (!isCorrect) {

@@ -15,9 +15,9 @@ export const options = {
         { duration: '30s', target: 0 },
     ],
     thresholds: {
-        'llm_errors': ['rate<0.1'],        // max 10% grešaka
-        'llm_latency': ['p(95)<2000'],     // 95% zahteva ispod 2s
-        'llm_success': ['rate>0.9'],       // min 90% uspešnih
+        'llm_errors': ['rate<0.1'],
+        'llm_latency': ['p(95)<2000'],
+        'llm_success': ['rate>0.9'],
     },
 };
 
@@ -47,11 +47,10 @@ export default function () {
 
     latency.add(duration);
 
-    // prepoznajemo rate limit posebno
     if (res.status === 429) {
         rateLimitHits.add(1);
         console.log(`⚠️ RATE LIMIT hit! Waiting...`);
-        sleep(2); // čekamo pre sledećeg pokušaja
+        sleep(2);
     } else if (res.status === 200) {
         errorRate.add(0);
         successRate.add(1);

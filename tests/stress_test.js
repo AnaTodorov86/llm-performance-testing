@@ -9,14 +9,14 @@ const successRate = new Rate('llm_success');
 
 export const options = {
     stages: [
-        { duration: '20s', target: 10 },  // brzo rampujemo
-        { duration: '20s', target: 20 },  // guramo do limita
-        { duration: '20s', target: 40 },  // stress zona
-        { duration: '20s', target: 60 },  // ekstremni load
-        { duration: '20s', target: 0 },   // ramp down
+        { duration: '20s', target: 10 },
+        { duration: '20s', target: 20 },
+        { duration: '20s', target: 40 },
+        { duration: '20s', target: 60 },
+        { duration: '20s', target: 0 },
     ],
     thresholds: {
-        'llm_latency': ['p(95)<5000'],    // opušteniji threshold za stress
+        'llm_latency': ['p(95)<5000'],
     },
 };
 
@@ -61,12 +61,10 @@ export default function () {
 
     if (res.status === 429) {
         rateLimitHits.add(1);
-        // ne cekamo ovde - zelimo da vidimo sta se desi pod punim stresom
     } else if (res.status === 200) {
         errorRate.add(0);
         successRate.add(1);
 
-        // logujemo uspesne odgovore da vidimo kvalitet pod stresom
         const body = JSON.parse(res.body);
         const answer = body.choices[0].message.content;
         console.log(`✅ [${res.timings.duration}ms] Q: "${prompt}" → A: "${answer}"`);
@@ -81,5 +79,5 @@ export default function () {
         'response has content': (r) => r.body.length > 0,
     });
 
-    sleep(0.5); // kraći sleep — više pritiska!
+    sleep(0.5);
 }

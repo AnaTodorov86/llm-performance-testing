@@ -10,14 +10,13 @@ export const options = {
     vus: 1,
     iterations: 30,
     thresholds: {
-        'inconsistencies': ['rate<0.1'],      // max 10% nekonzistentnih
-        'consistency_pass': ['rate>0.9'],     // min 90% konzistentnih
-    },
+        'inconsistencies': ['rate<0.1'],
+        'consistency_pass': ['rate>0.9'],
+    }
 };
 
 const API_KEY = __ENV.GROQ_API_KEY || '';
 
-// svako pitanje ima ocekivani konzistentni odgovor
 const CONSISTENCY_CHECKS = [
     {
         prompt: 'What is the capital of France? One word only.',
@@ -95,7 +94,6 @@ export default function () {
 
     const isCorrect = answer.includes(testCase.expected);
 
-    // da li je odgovor konzistentan sa prethodnim?
     const previousAnswers = testCase.answers.slice(0, -1);
     const isConsistent = previousAnswers.length === 0 ||
         previousAnswers.every(prev => prev === answer);
