@@ -1,0 +1,9 @@
+.env
+*.env
+
+.idea/
+
+*.json
+*.csv
+
+.DS_Store
