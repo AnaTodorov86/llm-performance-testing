@@ -176,3 +176,7 @@ llm-performance-testing/
 - [ ] HTML report generation
 - [ ] Multi-model comparison (Groq vs OpenAI vs Gemini)
 - [ ] Expanded hallucination detection
+
+## Results
+
+See [BENCHMARK_RESULTS.md](./BENCHMARK_RESULTS.md) for full provider comparison and key findings.
