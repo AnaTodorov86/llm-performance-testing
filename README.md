@@ -15,6 +15,64 @@ reliability, and response quality under various load conditions.
 - **Quality** — Are the responses accurate and consistent?
 - **Hallucination Detection** — Does the model give wrong answers?
 
+## Architecture
+
+The framework follows a **SOLID/DRY** modular design — all shared logic lives in `lib/`,
+tests only import what they need.
+
+```mermaid
+flowchart TD
+    ENV[".env / GitHub Secrets\nGROQ_API_KEY"] --> CFG
+
+    subgraph LIB ["📦 lib/ — shared modules"]
+        CFG["config.js\nENV · Stages · Thresholds"]
+        MET["metrics.js\nTrend · Rate · Counter"]
+        HLP["helpers.js\naskLLM() · isCorrectAnswer()\nfollowsLengthInstruction()"]
+        PRM["prompts.js\nPERFORMANCE_PROMPTS\nQUALITY_CHECKS\nmakeConsistencyChecks()"]
+    end
+
+    subgraph TESTS ["🧪 tests/"]
+        PT["performance_test.js\nTEST_SCENARIO=\nbaseline · load · stress"]
+        QT["quality_test.js\nhallucination detection"]
+        CT["consistency_test.js\ntemperature=0 stability"]
+    end
+
+    subgraph GROQ ["☁️ Groq API"]
+        MODEL["llama-3.1-8b-instant"]
+    end
+
+    subgraph CI ["⚙️ GitHub Actions"]
+        GHA[".github/workflows/\nllm-quality.yml"]
+    end
+
+    subgraph OUT ["📊 Output"]
+        REP["reports/\nbaseline.json · load.json\nstress.json · quality.json"]
+        DASH["dashboard.html\nlatency · error rate\nhallucination count"]
+    end
+
+    CFG --> PT & QT & CT
+    MET --> PT & QT & CT
+    HLP --> PT & QT & CT
+    PRM --> PT & QT & CT
+
+    PT & QT & CT -->|"HTTP POST"| MODEL
+    MODEL -->|"JSON response"| HLP
+
+    GHA -->|"k6 run"| PT & QT & CT
+    PT & QT & CT -->|"--out json"| REP
+    REP --> DASH
+```
+
+| Module | Responsibility |
+|--------|---------------|
+| `lib/config.js` | ENV variables, test stage profiles, thresholds |
+| `lib/metrics.js` | All k6 custom metrics (single source — no duplicates) |
+| `lib/helpers.js` | `askLLM()` HTTP wrapper, answer evaluation functions |
+| `lib/prompts.js` | All test prompts and expected answers |
+| `tests/performance_test.js` | Baseline / Load / Stress via `TEST_SCENARIO` env var |
+| `tests/quality_test.js` | Hallucination detection, instruction-following |
+| `tests/consistency_test.js` | Response stability at `temperature=0` |
+
 ## 🛠️ Tech Stack
 
 - **k6** — Load testing framework
