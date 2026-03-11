@@ -1,128 +1,79 @@
-import http from 'k6/http';
-import { check, sleep } from 'k6';
-import { Rate, Counter } from 'k6/metrics';
+/**
+ * tests/consistency_test.js
+ * Testing LLM's consistency.'
+ *
+ * How to run:
+ *   k6 run --env GROQ_API_KEY=$KEY tests/consistency_test.js
+ */
 
-const inconsistencyRate = new Rate('inconsistencies');
-const consistencyPass = new Rate('consistency_pass');
-const totalInconsistencies = new Counter('total_inconsistencies');
+import { check, sleep } from 'k6';
+
+import { THRESHOLDS_CONSISTENCY } from '../lib/config.js';
+import {
+    inconsistencies,
+    consistencyPass,
+    totalInconsistencies,
+} from '../lib/metrics.js';
+import { askLLM, isCorrectAnswer } from '../lib/helpers.js';
+import { makeConsistencyChecks }   from '../lib/prompts.js';
+
+// ---------------------------------------------------------------------------
+// k6 options
+// ---------------------------------------------------------------------------
 
 export const options = {
-    vus: 1,
+    vus:        1,
     iterations: 30,
-    thresholds: {
-        'inconsistencies': ['rate<0.1'],
-        'consistency_pass': ['rate>0.9'],
-    }
+    thresholds: THRESHOLDS_CONSISTENCY,
 };
 
-const API_KEY = __ENV.GROQ_API_KEY || '';
 
-const CONSISTENCY_CHECKS = [
-    {
-        prompt: 'What is the capital of France? One word only.',
-        expected: 'paris',
-        asked: 0,
-        answers: [],
-    },
-    {
-        prompt: 'What is 5+5? Single number only.',
-        expected: '10',
-        asked: 0,
-        answers: [],
-    },
-    {
-        prompt: 'What is the capital of Japan? One word only.',
-        expected: 'tokyo',
-        asked: 0,
-        answers: [],
-    },
-    {
-        prompt: 'What color is grass? One word only.',
-        expected: 'green',
-        asked: 0,
-        answers: [],
-    },
-    {
-        prompt: 'What is 3x3? Single number only.',
-        expected: '9',
-        asked: 0,
-        answers: [],
-    },
-];
+const CHECKS = makeConsistencyChecks();
 
-function askLLM(prompt) {
-    const payload = JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 20,
-        temperature: 0,
-    });
-
-    const params = {
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${API_KEY}`,
-        },
-    };
-
-    const res = http.post(
-        'https://api.groq.com/openai/v1/chat/completions',
-        payload,
-        params
-    );
-
-    if (res.status === 200) {
-        const body = JSON.parse(res.body);
-        return body.choices[0].message.content.trim().toLowerCase();
-    }
-
-    return null;
-}
+// ---------------------------------------------------------------------------
+// Test logic
+// ---------------------------------------------------------------------------
 
 export default function () {
-    const testCase = CONSISTENCY_CHECKS[Math.floor(Math.random() * CONSISTENCY_CHECKS.length)];
+    const testCase = CHECKS[Math.floor(Math.random() * CHECKS.length)];
+    const { answer, status } = askLLM(testCase.prompt, 20, 0);
 
-    const answer = askLLM(testCase.prompt);
-
-    if (answer === null) {
+    if (status === 429 || answer === null) {
         sleep(2);
         return;
     }
 
-    testCase.asked++;
+    const correct       = isCorrectAnswer(answer, testCase.expected);
+    const prevAnswers   = testCase.answers.slice();
+    const isConsistent  = prevAnswers.length === 0 || prevAnswers.every(prev => prev === answer);
+
     testCase.answers.push(answer);
 
-    const isCorrect = answer.includes(testCase.expected);
-
-    const previousAnswers = testCase.answers.slice(0, -1);
-    const isConsistent = previousAnswers.length === 0 ||
-        previousAnswers.every(prev => prev === answer);
-
-    if (!isCorrect) {
-        inconsistencyRate.add(1);
+    if (!correct) {
+        inconsistencies.add(1);
         consistencyPass.add(0);
         totalInconsistencies.add(1);
         console.log(`❌ WRONG ANSWER`);
-        console.log(`   Q: "${testCase.prompt}"`);
+        console.log(`   Q:        "${testCase.prompt}"`);
         console.log(`   Expected: "${testCase.expected}"`);
-        console.log(`   Got: "${answer}"`);
+        console.log(`   Got:      "${answer}"`);
     } else if (!isConsistent) {
-        inconsistencyRate.add(1);
+        inconsistencies.add(1);
         consistencyPass.add(0);
         totalInconsistencies.add(1);
-        console.log(`⚠️ INCONSISTENT`);
-        console.log(`   Q: "${testCase.prompt}"`);
-        console.log(`   Previous: "${previousAnswers[previousAnswers.length - 1]}"`);
-        console.log(`   Now: "${answer}"`);
+        console.log(`⚠️  INCONSISTENT ANSWER`);
+        console.log(`   Q:       "${testCase.prompt}"`);
+        console.log(`   Before:  "${prevAnswers[prevAnswers.length - 1]}"`);
+        console.log(`   Now:    "${answer}"`);
     } else {
-        inconsistencyRate.add(0);
+        inconsistencies.add(0);
         consistencyPass.add(1);
-        console.log(`✅ [ask #${testCase.asked}] "${testCase.prompt}" → "${answer}"`);
+        console.log(`✅ [retry #${testCase.answers.length}] "${testCase.prompt}" → "${answer}"`);
     }
 
     check(answer, {
-        'answer is not null': (a) => a !== null,
-        'answer is correct': (a) => a !== null && a.includes(testCase.expected),
+        'answer is not null':   (a) => a !== null,
+        'answer is correct':    (a) => isCorrectAnswer(a, testCase.expected),
         'answer is consistent': () => isConsistent,
     });
 

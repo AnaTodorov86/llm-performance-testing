@@ -1,127 +1,66 @@
-import http from 'k6/http';
-import { check, sleep } from 'k6';
-import { Rate, Counter } from 'k6/metrics';
+/**
+ * tests/quality_test.js
+ * Testing LLM's quality.'
+ *
+ * How to run:
+ *   k6 run --env GROQ_API_KEY=$KEY tests/quality_test.js
+ */
 
-const qualityFailRate = new Rate('quality_failures');
-const hallucinations = new Counter('hallucinations');
-const inconsistencies = new Counter('inconsistencies');
+import { check, sleep } from 'k6';
+
+import { THRESHOLDS_QUALITY } from '../lib/config.js';
+import { qualityFailures, hallucinations } from '../lib/metrics.js';
+import { askLLM, isCorrectAnswer, followsLengthInstruction } from '../lib/helpers.js';
+import { QUALITY_CHECKS } from '../lib/prompts.js';
+
+// ---------------------------------------------------------------------------
+// k6 options
+// ---------------------------------------------------------------------------
 
 export const options = {
-    vus: 3,
+    vus:        3,
     iterations: 30,
-    thresholds: {
-        'quality_failures': ['rate<0.1'],
-        'hallucinations': ['count<5'],
-        'inconsistencies': ['count<5'],
-    },
+    thresholds: THRESHOLDS_QUALITY,
 };
 
-const API_KEY = __ENV.GROQ_API_KEY || '';
-
-const QUALITY_CHECKS = [
-    {
-        prompt: 'What is the capital of France? Answer in one word only.',
-        expected: 'paris',
-        type: 'factual',
-    },
-    {
-        prompt: 'What is 2+2? Answer with a single number only.',
-        expected: '4',
-        type: 'math',
-    },
-    {
-        prompt: 'What is the opposite of cold? Answer in one word only.',
-        expected: ['hot', 'warm'],
-        type: 'factual',
-    },
-    {
-        prompt: 'What is the capital of Germany? Answer in one word only.',
-        expected: 'berlin',
-        type: 'factual',
-    },
-    {
-        prompt: 'What is 10+10? Answer with a single number only.',
-        expected: '20',
-        type: 'math',
-    },
-    {
-        prompt: 'What color is the sky on a clear day? Answer in one word only.',
-        expected: 'blue',
-        type: 'factual',
-    },
-];
-
-function askLLM(prompt) {
-    const payload = JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 20,
-        temperature: 0,
-    });
-
-    const params = {
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${API_KEY}`,
-        },
-    };
-
-    const res = http.post(
-        'https://api.groq.com/openai/v1/chat/completions',
-        payload,
-        params
-    );
-
-    if (res.status === 200) {
-        const body = JSON.parse(res.body);
-        return body.choices[0].message.content.trim().toLowerCase();
-    }
-
-    return null;
-}
+// ---------------------------------------------------------------------------
+// Test logic
+// ---------------------------------------------------------------------------
 
 export default function () {
     const testCase = QUALITY_CHECKS[Math.floor(Math.random() * QUALITY_CHECKS.length)];
-    const answer = askLLM(testCase.prompt);
+    const { answer, status } = askLLM(testCase.prompt, 20, 0);
 
-    if (answer === null) {
+    if (status === 429 || answer === null) {
         sleep(2);
         return;
     }
 
-    const isCorrect = Array.isArray(testCase.expected)
-        ? testCase.expected.some(e => answer.includes(e))
-        : answer.includes(testCase.expected);
+    const correct     = isCorrectAnswer(answer, testCase.expected);
+    const wellFormed  = followsLengthInstruction(answer);
 
-    const isTooLong = answer.split(' ').length > 5;
-
-    if (!isCorrect) {
+    if (!correct) {
         hallucinations.add(1);
-        qualityFailRate.add(1);
+        qualityFailures.add(1);
         console.log(`❌ HALLUCINATION [${testCase.type}]`);
-        console.log(`   Q: "${testCase.prompt}"`);
+        console.log(`   Q:        "${testCase.prompt}"`);
         console.log(`   Expected: "${testCase.expected}"`);
-        console.log(`   Got: "${answer}"`);
-    } else if (isTooLong) {
-        inconsistencies.add(1);
-        qualityFailRate.add(1);
-        console.log(`⚠️ INSTRUCTION IGNORED [${testCase.type}]`);
-        console.log(`   Q: "${testCase.prompt}"`);
-        console.log(`   Got: "${answer}" (too long!)`);
+        console.log(`   Got:      "${answer}"`);
+    } else if (!wellFormed) {
+        qualityFailures.add(1);
+        console.log(`⚠️  INSTRUCTION IGNORED [${testCase.type}]`);
+        console.log(`   Q:   "${testCase.prompt}"`);
+        console.log(`   Got: "${answer}" (previše riječi)`);
     } else {
-        qualityFailRate.add(0);
+        qualityFailures.add(0);
         console.log(`✅ [${testCase.type}] "${testCase.prompt}" → "${answer}"`);
     }
 
     check(answer, {
-        'answer is not null': (a) => a !== null,
-        'answer is correct': (a) => a !== null && (
-            Array.isArray(testCase.expected)
-                ? testCase.expected.some(e => a.includes(e))
-                : a.includes(testCase.expected)
-        ),
-        'answer follows instructions': (a) => a !== null && a.split(' ').length <= 5,
+        'answer is not null':             (a) => a !== null,
+        'answer is correct':              (a) => isCorrectAnswer(a, testCase.expected),
+        'answer follows instructions':    (a) => followsLengthInstruction(a),
     });
 
     sleep(1);
-    }
+}

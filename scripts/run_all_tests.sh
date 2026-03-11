@@ -1,32 +1,40 @@
 #!/bin/bash
+# scripts/run_all_tests.sh
 
-echo "🚀 Starting LLM Performance & Quality Test Suite"
-echo "================================================="
+set -euo pipefail
 
-# učitaj API key iz .env
-set -a
-source .env
-set +a
+set -a; source "$(dirname "$0")/../.env" set +a
 
-echo ""
-echo "📊 Running Baseline Test (5 VUs)..."
-k6 run --env GROQ_API_KEY=$GROQ_API_KEY tests/baseline_test.js
+echo "🚀 LLM Performance & Quality Test Suite"
+echo "========================================"
 
 echo ""
-echo "📊 Running Load Test (20 VUs)..."
-k6 run --env GROQ_API_KEY=$GROQ_API_KEY tests/load_test.js
+echo "📊 Baseline (1–5 VUs)..."
+k6 run --env GROQ_API_KEY=$GROQ_API_KEY \
+       --env TEST_SCENARIO=baseline \
+       tests/performance_test.js
 
 echo ""
-echo "📊 Running Stress Test (60 VUs)..."
-k6 run --env GROQ_API_KEY=$GROQ_API_KEY tests/stress_test.js
+echo "📊 Load (5–20 VUs)..."
+k6 run --env GROQ_API_KEY=$GROQ_API_KEY \
+       --env TEST_SCENARIO=load \
+       tests/performance_test.js
 
 echo ""
-echo "🧠 Running Quality Test..."
-k6 run --env GROQ_API_KEY=$GROQ_API_KEY tests/quality_test.js
+echo "📊 Stress (10–60 VUs)..."
+k6 run --env GROQ_API_KEY=$GROQ_API_KEY \
+       --env TEST_SCENARIO=stress \
+       tests/performance_test.js
 
 echo ""
-echo "🔄 Running Consistency Test..."
-k6 run --env GROQ_API_KEY=$GROQ_API_KEY tests/consistency_test.js
+echo "🧠 Quality test..."
+k6 run --env GROQ_API_KEY=$GROQ_API_KEY \
+       tests/quality_test.js
 
 echo ""
-echo "✅ All tests completed!"
+echo "🔄 Consistency test..."
+k6 run --env GROQ_API_KEY=$GROQ_API_KEY \
+       tests/consistency_test.js
+
+echo ""
+echo "✅ All test executed"
