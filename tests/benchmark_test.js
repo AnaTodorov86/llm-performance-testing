@@ -1,56 +1,27 @@
 /**
  * tests/benchmark_test.js
- *
- * Runs the same prompts against multiple providers and compares:
- *   - latency (p50, p95)
- *   - error rate
- *   - hallucination rate
- *   - instruction-following rate
- *
- * Each provider gets its own set of k6 metrics so results are
- * visible separately in the summary output.
+ * Multi-provider benchmark with self-healing analysis on failures.
  *
  * Usage:
- *   # Run against Groq (default)
- *   k6 run --env GROQ_API_KEY=$KEY tests/benchmark_test.js
- *
- *   # Run against local Ollama
- *   k6 run --env PROVIDER=ollama tests/benchmark_test.js
- *
- *   # Compare both — run twice and diff the summary JSONs
- *   k6 run --env PROVIDER=groq   --out json=reports/bench_groq.json   tests/benchmark_test.js
- *   k6 run --env PROVIDER=ollama --out json=reports/bench_ollama.json tests/benchmark_test.js
+ *   k6 run --env GROQ_API_KEY=$KEY --env PROVIDER=groq   tests/benchmark_test.js
+ *   k6 run --env GROQ_API_KEY=$KEY --env PROVIDER=ollama tests/benchmark_test.js
  */
 
 import { check, sleep } from 'k6';
-import { Trend, Rate } from 'k6/metrics';
+import { Trend, Rate }   from 'k6/metrics';
 
-import { getProvider }                              from '../lib/providers.js';
+import { getProvider }                                       from '../lib/providers.js';
 import { askLLM, isCorrectAnswer, followsLengthInstruction } from '../lib/helpers.js';
-import { QUALITY_CHECKS }                           from '../lib/prompts.js';
-
-// ---------------------------------------------------------------------------
-// Resolve provider once at init time
-// ---------------------------------------------------------------------------
+import { QUALITY_CHECKS }                                    from '../lib/prompts.js';
+import { analyzeFailure }                                    from '../lib/analyzer.js';
 
 const provider = getProvider();
-const pName    = provider.name.toLowerCase();  // e.g. 'groq' or 'ollama'
+const pName    = provider.name.toLowerCase();
 
-// ---------------------------------------------------------------------------
-// Per-provider metrics
-// Naming pattern: bench_<provider>_<metric>
-// This means Groq and Ollama results are always visible separately,
-// even if you later run them in the same k6 scenario.
-// ---------------------------------------------------------------------------
-
-const latency      = new Trend(`bench_${pName}_latency`);
-const errorRate    = new Rate(`bench_${pName}_errors`);
-const correctRate  = new Rate(`bench_${pName}_correct`);
-const formatRate   = new Rate(`bench_${pName}_format_ok`);
-
-// ---------------------------------------------------------------------------
-// k6 options
-// ---------------------------------------------------------------------------
+const latency     = new Trend(`bench_${pName}_latency`);
+const errorRate   = new Rate(`bench_${pName}_errors`);
+const correctRate = new Rate(`bench_${pName}_correct`);
+const formatRate  = new Rate(`bench_${pName}_format_ok`);
 
 export const options = {
     vus:        2,
@@ -63,10 +34,6 @@ export const options = {
     },
 };
 
-// ---------------------------------------------------------------------------
-// Test logic
-// ---------------------------------------------------------------------------
-
 export default function () {
     const testCase = QUALITY_CHECKS[Math.floor(Math.random() * QUALITY_CHECKS.length)];
     const { answer, status, duration } = askLLM(testCase.prompt, 20, 0, provider);
@@ -77,8 +44,8 @@ export default function () {
         return;
     }
 
-    const correct    = isCorrectAnswer(answer, testCase.expected);
-    const formatOk   = followsLengthInstruction(answer);
+    const correct  = isCorrectAnswer(answer, testCase.expected);
+    const formatOk = followsLengthInstruction(answer);
 
     latency.add(duration);
     errorRate.add(0);
@@ -87,13 +54,22 @@ export default function () {
 
     if (!correct) {
         console.log(`❌ [${provider.name}][${testCase.type}] Expected: "${testCase.expected}" | Got: "${answer}"`);
+
+        // Self-healing: AI analyzes the failure
+        analyzeFailure({
+            prompt:   testCase.prompt,
+            expected: testCase.expected,
+            got:      answer,
+            type:     testCase.type,
+            provider: provider.name,
+        });
     } else {
         console.log(`✅ [${provider.name}][${duration}ms] "${answer}"`);
     }
 
     check(answer, {
-        'answer is correct':         (a) => isCorrectAnswer(a, testCase.expected),
-        'answer follows format':     (a) => followsLengthInstruction(a),
+        'answer is correct':     (a) => isCorrectAnswer(a, testCase.expected),
+        'answer follows format': (a) => followsLengthInstruction(a),
     });
 
     sleep(1);

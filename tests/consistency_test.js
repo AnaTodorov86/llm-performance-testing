@@ -1,6 +1,7 @@
 /**
  * tests/consistency_test.js
- * Testing LLM's consistency.'
+ * Testing LLM's consistency — same prompt at temperature=0 should always
+ * return the same answer. Self-healing analysis fires on every failure.
  *
  * How to run:
  *   k6 run --env GROQ_API_KEY=$KEY tests/consistency_test.js
@@ -8,14 +9,15 @@
 
 import { check, sleep } from 'k6';
 
-import { THRESHOLDS_CONSISTENCY } from '../lib/config.js';
+import { THRESHOLDS_CONSISTENCY }  from '../lib/config.js';
 import {
     inconsistencies,
     consistencyPass,
     totalInconsistencies,
-} from '../lib/metrics.js';
+}                                  from '../lib/metrics.js';
 import { askLLM, isCorrectAnswer } from '../lib/helpers.js';
 import { makeConsistencyChecks }   from '../lib/prompts.js';
+import { analyzeFailure }          from '../lib/analyzer.js';
 
 // ---------------------------------------------------------------------------
 // k6 options
@@ -27,7 +29,6 @@ export const options = {
     thresholds: THRESHOLDS_CONSISTENCY,
 };
 
-
 const CHECKS = makeConsistencyChecks();
 
 // ---------------------------------------------------------------------------
@@ -35,7 +36,7 @@ const CHECKS = makeConsistencyChecks();
 // ---------------------------------------------------------------------------
 
 export default function () {
-    const testCase = CHECKS[Math.floor(Math.random() * CHECKS.length)];
+    const testCase    = CHECKS[Math.floor(Math.random() * CHECKS.length)];
     const { answer, status } = askLLM(testCase.prompt, 20, 0);
 
     if (status === 429 || answer === null) {
@@ -43,9 +44,9 @@ export default function () {
         return;
     }
 
-    const correct       = isCorrectAnswer(answer, testCase.expected);
-    const prevAnswers   = testCase.answers.slice();
-    const isConsistent  = prevAnswers.length === 0 || prevAnswers.every(prev => prev === answer);
+    const correct      = isCorrectAnswer(answer, testCase.expected);
+    const prevAnswers  = testCase.answers.slice();
+    const isConsistent = prevAnswers.length === 0 || prevAnswers.every(prev => prev === answer);
 
     testCase.answers.push(answer);
 
@@ -57,6 +58,15 @@ export default function () {
         console.log(`   Q:        "${testCase.prompt}"`);
         console.log(`   Expected: "${testCase.expected}"`);
         console.log(`   Got:      "${answer}"`);
+
+        analyzeFailure({
+            prompt:   testCase.prompt,
+            expected: testCase.expected,
+            got:      answer,
+            type:     'consistency-wrong-answer',
+            provider: 'groq',
+        });
+
     } else if (!isConsistent) {
         inconsistencies.add(1);
         consistencyPass.add(0);
@@ -64,7 +74,16 @@ export default function () {
         console.log(`⚠️  INCONSISTENT ANSWER`);
         console.log(`   Q:       "${testCase.prompt}"`);
         console.log(`   Before:  "${prevAnswers[prevAnswers.length - 1]}"`);
-        console.log(`   Now:    "${answer}"`);
+        console.log(`   Now:     "${answer}"`);
+
+        analyzeFailure({
+            prompt:   testCase.prompt,
+            expected: prevAnswers[prevAnswers.length - 1],
+            got:      answer,
+            type:     'consistency-drift',
+            provider: 'groq',
+        });
+
     } else {
         inconsistencies.add(0);
         consistencyPass.add(1);

@@ -1,11 +1,12 @@
 /**
  * tests/performance_test.js
+ * Baseline / Load / Stress scenarios in one file.
+ * Analyzer fires when error rate threshold is crossed.
  *
  * Run:
  *   k6 run --env GROQ_API_KEY=$KEY --env TEST_SCENARIO=baseline tests/performance_test.js
- *   k6 run --env GROQ_API_KEY=$KEY --env TEST_SCENARIO=load    tests/performance_test.js
- *   k6 run --env GROQ_API_KEY=$KEY --env TEST_SCENARIO=stress  tests/performance_test.js
- *
+ *   k6 run --env GROQ_API_KEY=$KEY --env TEST_SCENARIO=load     tests/performance_test.js
+ *   k6 run --env GROQ_API_KEY=$KEY --env TEST_SCENARIO=stress   tests/performance_test.js
  */
 
 import { check, sleep } from 'k6';
@@ -16,17 +17,16 @@ import {
     STAGES_STRESS,
     THRESHOLDS_DEFAULT,
     THRESHOLDS_STRESS,
-} from '../lib/config.js';
-
+}                          from '../lib/config.js';
 import {
     llmLatency,
     llmErrors,
     llmSuccess,
     llmRateLimits,
-} from '../lib/metrics.js';
-
-import { askLLM }            from '../lib/helpers.js';
+}                          from '../lib/metrics.js';
+import { askLLM }          from '../lib/helpers.js';
 import { PERFORMANCE_PROMPTS } from '../lib/prompts.js';
+import { analyzeFailure }  from '../lib/analyzer.js';
 
 // ---------------------------------------------------------------------------
 // Scenario selection
@@ -47,7 +47,7 @@ const THRESHOLD_MAP = {
 };
 
 if (!STAGE_MAP[SCENARIO]) {
-    throw new Error(`Nepoznat TEST_SCENARIO: "${SCENARIO}". Dozvoljeno: baseline | load | stress`);
+    throw new Error(`Unknown TEST_SCENARIO: "${SCENARIO}". Allowed: baseline | load | stress`);
 }
 
 // ---------------------------------------------------------------------------
@@ -71,14 +71,26 @@ export default function () {
 
     if (status === 429) {
         llmRateLimits.add(1);
+        console.log(`⚠️  [${SCENARIO}] Rate limited`);
+
     } else if (status === 200) {
         llmErrors.add(0);
         llmSuccess.add(1);
         console.log(`✅ [${SCENARIO}][${duration}ms] "${prompt}" → "${answer}"`);
+
     } else {
         llmErrors.add(1);
         llmSuccess.add(0);
-        console.log(`❌ [${SCENARIO}] Error ${status}`);
+        console.log(`❌ [${SCENARIO}] HTTP ${status}`);
+
+        // Unexpected HTTP error — ask AI what might be wrong
+        analyzeFailure({
+            prompt:   prompt,
+            expected: 'valid HTTP 200 response',
+            got:      `HTTP ${status}`,
+            type:     `performance-${SCENARIO}`,
+            provider: 'groq',
+        });
     }
 
     check(answer, {
