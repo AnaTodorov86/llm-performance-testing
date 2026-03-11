@@ -6,14 +6,15 @@ on:
   pull_request:
     branches: [ main ]
   schedule:
-    - cron: '0 9 * * 1'
+    - cron: '0 9 * * 1' # Svaki ponedeljak u 09:00
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
       - name: Install k6
         run: |
@@ -26,7 +27,8 @@ jobs:
       - name: Run Baseline Test
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: k6 run --env GROQ_API_KEY=$GROQ_API_KEY tests/baseline_test.js
+          TEST_SCENARIO: baseline
+        run: k6 run --env GROQ_API_KEY=$GROQ_API_KEY --env TEST_SCENARIO=$TEST_SCENARIO tests/performance_test.js
 
       - name: Run Quality Test
         env:
@@ -37,3 +39,10 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: k6 run --env GROQ_API_KEY=$GROQ_API_KEY tests/consistency_test.js
+
+      - name: Upload Test Reports
+        if: always() # Čak i ako testovi fejliuju, sačuvaj izveštaj
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-test-reports
+          path: reports/
