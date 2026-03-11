@@ -9,7 +9,7 @@ TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 REPORT_DIR="reports/$TIMESTAMP"
 mkdir -p "$REPORT_DIR"
 
-echo "📊 Generisanje reporta → $REPORT_DIR"
+echo "📊 Generating report → $REPORT_DIR"
 
 k6 run --env GROQ_API_KEY=$GROQ_API_KEY \
        --env TEST_SCENARIO=baseline \
@@ -34,4 +34,4 @@ k6 run --env GROQ_API_KEY=$GROQ_API_KEY \
        --out json="$REPORT_DIR/consistency.json" \
        tests/consistency_test.js
 
-echo "✅ Reporti snimljeni u $REPORT_DIR"
+echo "✅ Report saved in  $REPORT_DIR"
