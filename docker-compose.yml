@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  k6:
+    build: .
+    environment:
+      - ENVIRONMENT=${ENV:-dev}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - PROVIDER=groq
+      - TEST_SCENARIO=baseline
+    volumes:
+      - ./reports:/app/reports
+    networks:
+      - k6-network
+
+  k6-load:
+    build: .
+    command: run --env TEST_SCENARIO=load tests/performance_test.js
+    environment:
+      - ENVIRONMENT=staging
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - PROVIDER=groq
+    volumes:
+      - ./reports:/app/reports
+    networks:
+      - k6-network
+    depends_on:
+      - k6
+
+  k6-stress:
+    build: .
+    command: run --env TEST_SCENARIO=stress tests/performance_test.js
+    environment:
+      - ENVIRONMENT=prod
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - PROVIDER=groq
+    volumes:
+      - ./reports:/app/reports
+    networks:
+      - k6-network
+    depends_on:
+      - k6
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - k6-network
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+    networks:
+      - k6-network
+    depends_on:
+      - prometheus
+
+networks:
+  k6-network:
+    driver: bridge
