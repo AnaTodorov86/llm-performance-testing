@@ -10,9 +10,9 @@ import { analyzeFailure } from '../lib/analyzer.js';
 import { getProvider } from '../lib/providers.js';
 import { setupTest, logResult, check, sleep, recordRequest, recordInconsistency, evaluateSLOs, recordTestResult, validateTestResult } from '../lib/testBase.js';
 
-export const options = { 
-    vus: 1, 
-    iterations: 30, 
+export const options = {
+    vus: 1,
+    iterations: 30,
     thresholds: THRESHOLDS_CONSISTENCY,
 };
 
@@ -25,9 +25,9 @@ export default function () {
     const testCase = CHECKS[Math.floor(Math.random() * CHECKS.length)];
     const { answer, status, correlationId } = askLLM(testCase.prompt, 20, 0);
 
-    if (status === 429 || answer === null) { 
-        sleep(2); 
-        return; 
+    if (status === 429 || answer === null) {
+        sleep(2);
+        return;
     }
 
     recordRequest(status === 200, 0);
@@ -84,7 +84,9 @@ export function handleSummary(data) {
 }
 
 function textSummary(data, sloResult, validation) {
-    if (!data) return 'No data available';
+    if (!data) {
+        return 'No data available';
+    }
     
     let output = `\n=== Consistency Test Summary ===\n\n`;
     

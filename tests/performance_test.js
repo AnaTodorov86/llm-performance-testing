@@ -3,22 +3,44 @@
  * Baseline / Load / Stress scenarios - KISS + DRY.
  */
 
-import { STAGES_BASELINE, STAGES_LOAD, STAGES_STRESS, THRESHOLDS_DEFAULT, THRESHOLDS_STRESS } from '../lib/config.js';
+import {
+    STAGES_BASELINE,
+    STAGES_LOAD,
+    STAGES_STRESS,
+    THRESHOLDS_DEFAULT,
+    THRESHOLDS_STRESS,
+} from '../lib/config.js';
 import { llmLatency, llmErrors, llmSuccess, llmRateLimits } from '../lib/metrics.js';
 import { askLLM } from '../lib/helpers.js';
 import { PERFORMANCE_PROMPTS } from '../lib/prompts.js';
 import { analyzeFailure } from '../lib/analyzer.js';
 import { getProvider } from '../lib/providers.js';
-import { setupTest, logResult, check, sleep, recordRequest, evaluateSLOs, recordTestResult, recordThresholdFailure, hasThresholdFailures, validateTestResult, syncK6Metrics } from '../lib/testBase.js';
+import {
+    setupTest,
+    logResult,
+    check,
+    sleep,
+    recordRequest,
+    evaluateSLOs,
+    recordTestResult,
+    validateTestResult,
+    syncK6Metrics,
+} from '../lib/testBase.js';
 
 const SCENARIO = (__ENV.TEST_SCENARIO || 'baseline').toLowerCase();
 const STAGES = { baseline: STAGES_BASELINE, load: STAGES_LOAD, stress: STAGES_STRESS };
-const THRESHOLDS = { baseline: THRESHOLDS_DEFAULT, load: THRESHOLDS_DEFAULT, stress: THRESHOLDS_STRESS };
+const THRESHOLDS = {
+    baseline: THRESHOLDS_DEFAULT,
+    load: THRESHOLDS_DEFAULT,
+    stress: THRESHOLDS_STRESS,
+};
 
-if (!STAGES[SCENARIO]) throw new Error(`Unknown TEST_SCENARIO: "${SCENARIO}"`);
+if (!STAGES[SCENARIO]) {
+    throw new Error(`Unknown TEST_SCENARIO: "${SCENARIO}"`);
+}
 
-export const options = { 
-    stages: STAGES[SCENARIO], 
+export const options = {
+    stages: STAGES[SCENARIO],
     thresholds: THRESHOLDS[SCENARIO],
 };
 
@@ -77,7 +99,9 @@ export function handleSummary(data) {
 }
 
 function extractMetrics(data) {
-    if (!data || !data.metrics) return {};
+    if (!data || !data.metrics) {
+        return {};
+    }
     
     return {
         latency: {
@@ -92,7 +116,9 @@ function extractMetrics(data) {
 }
 
 function textSummary(data, sloResult, validation) {
-    if (!data) return 'No data available';
+    if (!data) {
+        return 'No data available';
+    }
     
     let output = `\n=== Performance Test Summary (${SCENARIO}) ===\n\n`;
     

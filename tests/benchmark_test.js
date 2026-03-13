@@ -34,10 +34,10 @@ export default function () {
     const testCase = QUALITY_CHECKS[Math.floor(Math.random() * QUALITY_CHECKS.length)];
     const { answer, status, duration, correlationId } = askLLM(testCase.prompt, 20, 0, provider);
 
-    if (status === 429 || answer === null) { 
-        errorRate.add(1); 
-        sleep(2); 
-        return; 
+    if (status === 429 || answer === null) {
+        errorRate.add(1);
+        sleep(2);
+        return;
     }
 
     recordRequest(status === 200, duration);
@@ -82,7 +82,9 @@ export function handleSummary(data) {
 }
 
 function extractMetrics(data) {
-    if (!data || !data.metrics) return {};
+    if (!data || !data.metrics) {
+        return {};
+    }
     
     const latKey = `bench_${pName}_latency`;
     return {
@@ -96,7 +98,9 @@ function extractMetrics(data) {
 }
 
 function textSummary(data, sloResult, validation) {
-    if (!data) return 'No data available';
+    if (!data) {
+        return 'No data available';
+    }
     
     let output = `\n=== Benchmark Test Summary (${pName}) ===\n\n`;
     

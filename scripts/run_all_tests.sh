@@ -3,7 +3,9 @@
 
 set -euo pipefail
 
-set -a; source "$(dirname "$0")/../.env" set +a
+set -a
+source "$(dirname "$0")/../.env"
+set +a
 
 echo "🚀 LLM Performance & Quality Test Suite"
 echo "========================================"

@@ -10,9 +10,9 @@ import { analyzeFailure } from '../lib/analyzer.js';
 import { getProvider } from '../lib/providers.js';
 import { setupTest, logResult, check, sleep, recordRequest, recordQualityFailure, recordHallucination, recordInstructionFollowingFailure, evaluateSLOs, recordTestResult, validateTestResult } from '../lib/testBase.js';
 
-export const options = { 
-    vus: 3, 
-    iterations: 30, 
+export const options = {
+    vus: 3,
+    iterations: 30,
     thresholds: THRESHOLDS_QUALITY,
 };
 
@@ -23,9 +23,9 @@ export default function () {
     const { answer, status, provider: providerName, correlationId } = askLLM(testCase.prompt, 20, 0);
     const provider = providerName || getProvider().name;
 
-    if (status === 429 || answer === null) { 
-        sleep(2); 
-        return; 
+    if (status === 429 || answer === null) {
+        sleep(2);
+        return;
     }
 
     recordRequest(status === 200, 0);
@@ -78,7 +78,9 @@ export function handleSummary(data) {
 }
 
 function textSummary(data, sloResult, validation) {
-    if (!data) return 'No data available';
+    if (!data) {
+        return 'No data available';
+    }
     
     let output = `\n=== Quality Test Summary ===\n\n`;
     

@@ -3,8 +3,10 @@ import { describe, it, expect } from 'vitest';
 const normalize = (str) => str?.trim().toLowerCase() || '';
 
 function isCorrectAnswer(answer, expected) {
-    if (!answer) return false;
-    
+    if (!answer) {
+        return false;
+    }
+
     const normalizedAnswer = normalize(answer);
     
     if (Array.isArray(expected)) {
@@ -15,7 +17,9 @@ function isCorrectAnswer(answer, expected) {
 }
 
 function followsLengthInstruction(answer, maxWords = 5) {
-    if (!answer) return false;
+    if (!answer) {
+        return false;
+    }
     const words = answer.trim().split(/\s+/).filter(w => w.length > 0);
     return words.length <= maxWords;
 }
