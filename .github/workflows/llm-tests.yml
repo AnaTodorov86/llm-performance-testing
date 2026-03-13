@@ -1,4 +1,4 @@
-name: LLM Performance & Quality Tests (Google SDET Standard)
+name: LLM Performance & Quality Tests
 
 on:
   push:
@@ -19,9 +19,6 @@ on:
           - staging
           - prod
 
-env:
-  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-
 jobs:
   # Gate 1: Lint & Unit Tests
   lint:
@@ -35,7 +32,7 @@ jobs:
       - name: Run unit tests
         run: npm test
 
-  # Gate 2: Smoke Test (fast feedback)
+  # Gate 2: Smoke Test
   smoke-test:
     needs: lint
     runs-on: ubuntu-latest
@@ -43,23 +40,21 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Install k6
-        uses: grafana/k6-action@v0.2.0
-        with:
-          k6-version: 'latest'
-      
-      - name: Run Smoke Test (5 iter, 1 VU)
         run: |
-          k6 run -e ENVIRONMENT=dev \
-            --iterations 5 \
-            --vus 1 \
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+      
+      - name: Run Smoke Test
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          k6 run --iterations 5 --vus 1 \
+            --env GROQ_API_KEY=$GROQ_API_KEY \
+            --env ENVIRONMENT=dev \
             tests/quality_test.js
-      
-      - name: Check Smoke Test Results
-        run: |
-          if [ $? -ne 0 ]; then
-            echo "Smoke test failed - blocking pipeline"
-            exit 1
-          fi
 
   # Gate 3: Environment-specific Tests
   dev-tests:
@@ -68,11 +63,20 @@ jobs:
     if: github.event_name == 'push' || github.event.inputs.environment == 'dev'
     steps:
       - uses: actions/checkout@v4
-      - uses: grafana/k6-action@v0.2.0
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
       
       - name: Dev Environment Tests
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
-          k6 run -e ENVIRONMENT=dev \
+          k6 run --env GROQ_API_KEY=$GROQ_API_KEY \
+            --env ENVIRONMENT=dev \
             --env TEST_SCENARIO=baseline \
             tests/performance_test.js
 
@@ -82,11 +86,20 @@ jobs:
     if: github.event.inputs.environment == 'staging' || github.event_name == 'schedule'
     steps:
       - uses: actions/checkout@v4
-      - uses: grafana/k6-action@v0.2.0
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
       
       - name: Staging Environment Tests
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
-          k6 run -e ENVIRONMENT=staging \
+          k6 run --env GROQ_API_KEY=$GROQ_API_KEY \
+            --env ENVIRONMENT=staging \
             --env TEST_SCENARIO=load \
             tests/performance_test.js
 
@@ -97,37 +110,67 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v4
-      - uses: grafana/k6-action@v0.2.0
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
       
       - name: Production Environment Tests
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
-          k6 run -e ENVIRONMENT=prod \
+          k6 run --env GROQ_API_KEY=$GROQ_API_KEY \
+            --env ENVIRONMENT=prod \
             --env TEST_SCENARIO=stress \
             tests/performance_test.js
 
-  # Gate 4: Quality Gates
-  quality-gate:
-    needs: [dev-tests, staging-tests, prod-tests]
+  # Gate 4: Quality Tests
+  quality-test:
+    needs: lint
     runs-on: ubuntu-latest
-    if: always()
     steps:
-      - name: Evaluate SLOs
+      - uses: actions/checkout@v4
+      - name: Install k6
         run: |
-          echo "## SLO Evaluation" >> $GITHUB_STEP_SUMMARY
-          echo "| SLI | Target | Actual | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----|--------|--------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Availability | 95% | 98% | ✅ |" >> $GITHUB_STEP_SUMMARY
-          echo "| Latency P95 | 2000ms | 1850ms | ✅ |" >> $GITHUB_STEP_SUMMARY
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
       
-      - name: Check SLO Compliance
+      - name: Run Quality Test
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
-          # Exit with error if SLOs not met
-          echo "Checking SLOs..."
-          # Add actual SLO evaluation logic
+          k6 run --env GROQ_API_KEY=$GROQ_API_KEY \
+            tests/quality_test.js
 
-  # Gate 5: Report Generation
+  consistency-test:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+      
+      - name: Run Consistency Test
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          k6 run --env GROQ_API_KEY=$GROQ_API_KEY \
+            tests/consistency_test.js
+
+  # Gate 5: Report
   report:
-    needs: quality-gate
+    needs: [dev-tests, staging-tests, prod-tests, quality-test, consistency-test]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -137,32 +180,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: k6-test-reports-${{ github.run_number }}
-          path: |
-            reports/
-            **/*.json
+          path: reports/
           retention-days: 30
-
-      - name: Generate Markdown Report
-        run: |
-          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "### Environment: ${{ github.event.inputs.environment || 'dev' }}" >> $GITHUB_STEP_SUMMARY
-          
-      - name: Notify on Failure
-        if: failure() && github.event_name != 'pull_request'
-        uses: slackapi/slack-github-action@v1.25.0
-        with:
-          payload: |
-            {
-              "text": "🚨 LLM Performance Tests Failed",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*LLM Performance Tests Failed* \n Environment: ${{ github.event.inputs.environment || 'dev' }} \n Run: ${{ github.run_id }}"
-                  }
-                }
-              ]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
