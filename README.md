@@ -29,38 +29,30 @@ flowchart TD
         MET["metrics.js\nTrend · Rate · Counter"]
         HLP["helpers.js\naskLLM() · isCorrectAnswer()\nfollowsLengthInstruction()"]
         PRM["prompts.js\nPERFORMANCE_PROMPTS\nQUALITY_CHECKS\nmakeConsistencyChecks()"]
+        LOG["logger.js\nCorrelation IDs · JSON logging"]
+        VAL["validator.js\nTest data validation"]
     end
 
     subgraph TESTS ["🧪 tests/"]
         PT["performance_test.js\nTEST_SCENARIO=\nbaseline · load · stress"]
         QT["quality_test.js\nhallucination detection"]
         CT["consistency_test.js\ntemperature=0 stability"]
+        BT["benchmark_test.js\nmulti-provider"]
     end
 
     subgraph GROQ ["☁️ Groq API"]
         MODEL["llama-3.1-8b-instant"]
     end
 
-    subgraph CI ["⚙️ GitHub Actions"]
-        GHA[".github/workflows/\nllm-quality.yml"]
-    end
+    CFG --> PT & QT & CT & BT
+    MET --> PT & QT & CT & BT
+    HLP --> PT & QT & CT & BT
+    PRM --> PT & QT & CT & BT
+    LOG --> PT & QT & CT & BT
+    VAL --> PT & QT & CT & BT
 
-    subgraph OUT ["📊 Output"]
-        REP["reports/\nbaseline.json · load.json\nstress.json · quality.json"]
-        DASH["dashboard.html\nlatency · error rate\nhallucination count"]
-    end
-
-    CFG --> PT & QT & CT
-    MET --> PT & QT & CT
-    HLP --> PT & QT & CT
-    PRM --> PT & QT & CT
-
-    PT & QT & CT -->|"HTTP POST"| MODEL
+    PT & QT & CT & BT -->|"HTTP POST"| MODEL
     MODEL -->|"JSON response"| HLP
-
-    GHA -->|"k6 run"| PT & QT & CT
-    PT & QT & CT -->|"--out json"| REP
-    REP --> DASH
 ```
 
 | Module | Responsibility |
@@ -69,15 +61,46 @@ flowchart TD
 | `lib/metrics.js` | All k6 custom metrics (single source — no duplicates) |
 | `lib/helpers.js` | `askLLM()` HTTP wrapper, answer evaluation functions |
 | `lib/prompts.js` | All test prompts and expected answers |
+| `lib/logger.js` | Structured JSON logging with correlation IDs |
+| `lib/validator.js` | Test data validation at startup |
+| `lib/providers.js` | Multi-provider support (Groq, Ollama) |
 | `tests/performance_test.js` | Baseline / Load / Stress via `TEST_SCENARIO` env var |
 | `tests/quality_test.js` | Hallucination detection, instruction-following |
 | `tests/consistency_test.js` | Response stability at `temperature=0` |
+| `tests/benchmark_test.js` | Multi-provider comparison |
 
 ## 🛠️ Tech Stack
 
 - **k6** — Load testing framework
 - **Groq API** — LLM provider (llama-3.1-8b-instant)
+- **Vitest** — Unit testing for helper functions
 - **JavaScript** — Test scripting
+
+## Testing Features
+
+### Structured Logging
+All logs are JSON-formatted for easy dashboard parsing:
+```json
+{"level":"INFO","timestamp":"2026-03-13T15:30:00.000Z","testRunId":"abc-123","component":"helpers","message":"LLM request started","correlationId":"req-456"}
+```
+
+### Correlation IDs
+Every LLM request gets a unique correlation ID for tracing:
+- Request/response pairs can be traced through logs
+- Failures can be correlated with specific requests
+
+### Test Data Validation
+All test data is validated at startup:
+- Missing required fields
+- Invalid prompt formats
+- Empty test cases
+- Configuration issues
+
+### Unit Tests
+Run unit tests for helper functions:
+```bash
+npm test
+```
 
 ## 📊 Key Findings
 
@@ -85,7 +108,7 @@ flowchart TD
 |------|-----------|--------------|-------------|
 | Baseline | 5 | 100% | 139ms |
 | Load | 20 | 100% | 125ms |
-| Stress | 60 | 100% | 51ms |
+| Stress | 100% | 95% | 3s |
 
 > ⚠️ Rate limiting begins at ~5 simultaneous users on Groq free tier.
 > LLM response quality remains 100% when API responds successfully.
@@ -118,6 +141,11 @@ Verifies model gives consistent answers to identical questions.
 - ✅ Detects non-deterministic behavior
 - ✅ Validates temperature=0 consistency
 
+### 6. Benchmark Test
+Compare multiple LLM providers.
+- ✅ Groq vs Ollama comparison
+- ✅ Quality and latency comparison
+
 ## 🚀 How To Run
 
 ### Prerequisites
@@ -128,36 +156,57 @@ Verifies model gives consistent answers to identical questions.
 ```bash
 git clone https://github.com/AnaTodorov86/llm-performance-testing.git
 cd llm-performance-testing
+npm install
 cp .env.example .env
 # Add your GROQ_API_KEY to .env
 ```
 
-### Run All Tests
+### Run Unit Tests
 ```bash
-./scripts/run_all_tests.sh
+npm test
 ```
 
 ### Run Individual Tests
 ```bash
-k6 run --env GROQ_API_KEY=$GROQ_API_KEY tests/baseline_test.js
-k6 run --env GROQ_API_KEY=$GROQ_API_KEY tests/load_test.js
-k6 run --env GROQ_API_KEY=$GROQ_API_KEY tests/stress_test.js
+# Performance tests (baseline/load/stress)
+k6 run --env GROQ_API_KEY=$GROQ_API_KEY tests/performance_test.js
+k6 run --env GROQ_API_KEY=$GROQ_API_KEY --env TEST_SCENARIO=load tests/performance_test.js
+k6 run --env GROQ_API_KEY=$GROQ_API_KEY --env TEST_SCENARIO=stress tests/performance_test.js
+
+# Quality test
 k6 run --env GROQ_API_KEY=$GROQ_API_KEY tests/quality_test.js
+
+# Consistency test
 k6 run --env GROQ_API_KEY=$GROQ_API_KEY tests/consistency_test.js
+
+# Benchmark test (multi-provider)
+k6 run --env GROQ_API_KEY=$GROQ_API_KEY --env PROVIDER=groq tests/benchmark_test.js
+k6 run --env PROVIDER=ollama tests/benchmark_test.js
 ```
 
 ## 📁 Project Structure
 ```
 llm-performance-testing/
+├── lib/
+│   ├── config.js              # ENV variables, stages, thresholds
+│   ├── metrics.js             # k6 custom metrics
+│   ├── helpers.js             # askLLM(), answer validation
+│   ├── prompts.js             # Test prompts and test cases
+│   ├── logger.js              # Structured JSON logging
+│   ├── validator.js           # Test data validation
+│   ├── providers.js           # Multi-provider abstraction
+│   └── analyzer.js            # Self-healing failure analysis
 ├── tests/
-│   ├── baseline_test.js      # 5 VUs - normal conditions
-│   ├── load_test.js          # 20 VUs - realistic load
-│   ├── stress_test.js        # 60 VUs - breaking point
-│   ├── quality_test.js       # hallucination detection
-│   └── consistency_test.js   # response consistency
+│   ├── unit/
+│   │   └── helpers.test.js   # Unit tests for helper functions
+│   ├── performance_test.js    # Baseline/Load/Stress scenarios
+│   ├── quality_test.js        # Hallucination detection
+│   ├── consistency_test.js    # Response consistency
+│   └── benchmark_test.js      # Multi-provider comparison
 ├── scripts/
 │   └── run_all_tests.sh      # runs all tests
-├── .env.example              # environment variables template
+├── package.json               # npm dependencies
+├── .env.example               # environment variables template
 ├── .gitignore
 └── README.md
 ```
@@ -169,13 +218,6 @@ llm-performance-testing/
 3. **Latency** is excellent — avg ~92ms, p95 ~139ms
 4. **Consistency** is perfect with temperature=0
 5. **Hallucination risk** exists for questions with multiple valid answers
-
-## 🔮 Roadmap
-
-- [ ] CI/CD integration with GitHub Actions
-- [ ] HTML report generation
-- [ ] Multi-model comparison (Groq vs OpenAI vs Gemini)
-- [ ] Expanded hallucination detection
 
 ## Results
 
