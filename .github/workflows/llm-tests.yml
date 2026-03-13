@@ -23,7 +23,7 @@ env:
   GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
 
 jobs:
-  # Gate 1: Lint & Type Check
+  # Gate 1: Lint & Unit Tests
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -34,12 +34,6 @@ jobs:
         
       - name: Run unit tests
         run: npm test
-        
-      - name: Check code coverage
-        run: |
-          npm test -- --coverage
-          echo "Coverage threshold: 80%"
-          # Add coverage gate here
 
   # Gate 2: Smoke Test (fast feedback)
   smoke-test:
