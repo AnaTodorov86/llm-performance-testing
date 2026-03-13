@@ -8,7 +8,7 @@ import { askLLM, isCorrectAnswer, followsLengthInstruction } from '../lib/helper
 import { QUALITY_CHECKS } from '../lib/prompts.js';
 import { analyzeFailure } from '../lib/analyzer.js';
 import { getProvider } from '../lib/providers.js';
-import { setupTest, logResult, check, sleep, recordRequest, recordQualityFailure, recordHallucination, evaluateSLOs, recordTestResult, validateTestResult } from '../lib/testBase.js';
+import { setupTest, logResult, check, sleep, recordRequest, recordQualityFailure, recordHallucination, recordInstructionFollowingFailure, evaluateSLOs, recordTestResult, validateTestResult } from '../lib/testBase.js';
 
 export const options = { 
     vus: 3, 
@@ -46,6 +46,7 @@ export default function () {
     } else if (!wellFormed) {
         qualityFailures.add(1);
         recordQualityFailure();
+        recordInstructionFollowingFailure();
         
         logResult('quality_check', 'instruction_ignored', { correlationId, got: answer });
         analyzeFailure({ prompt: testCase.prompt, expected: testCase.expected, got: answer, type: 'format', provider });
