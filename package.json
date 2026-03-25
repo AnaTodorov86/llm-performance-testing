@@ -14,7 +14,7 @@
   "devDependencies": {
     "eslint": "^8.57.0",
     "prettier": "^3.2.0",
-    "vitest": "^2.0.0"
+    "vitest": "^4.1.0"
   },
   "dependencies": {
     "k6": "^0.0.0"
